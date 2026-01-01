@@ -12,15 +12,16 @@ body {
   font-family: sans-serif;
   color: #f0f0f0;
   background-image: url('dark_fantasy_bg.png');
-  background-size: 100% auto;
-  background-position: center top;
   background-repeat: no-repeat;
+  background-position: center top;
+  background-size: 100% auto;
   background-attachment: fixed;
-
   display: flex;
   flex-direction: column;
   align-items: center;
 }
+
+h1 { margin-top: 0; }
 
 button {
   padding: 6px 12px;
@@ -123,22 +124,39 @@ input[type="number"] {
 <div id="score-container"></div>
 
 <script>
+/* ===== AUDIO SYSTEM ===== */
+let audioCtx = null;
+function beep(freq = 440, duration = 150, volume = 0.2) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.value = volume;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration/1000);
+}
+
+/* ===== LOGIKA GRY ===== */
 let players = [];
 let activeIndex = null;
 let startedAt = null;
 let timerInterval = null;
 let nextId = 1;
 
-/* ===== TIME ===== */
+/* ===== FORMAT CZASU ===== */
 function formatMs(ms) {
   const s = Math.floor(ms / 1000);
-  return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
 }
 
-/* ===== RENDER ===== */
+/* ===== RENDER KOŁA ===== */
 function renderPlayers() {
   const circle = document.getElementById('players-circle');
   circle.innerHTML = '';
+  if (!players.length) return;
 
   const size = circle.clientWidth;
   const center = size / 2 - 40;
@@ -155,59 +173,65 @@ function renderPlayers() {
     div.style.top = `${y}px`;
 
     let turnElapsed = 0;
-    if (activeIndex === i && startedAt)
-      turnElapsed = Date.now() - startedAt;
+    if (activeIndex === i && startedAt) turnElapsed = Date.now() - startedAt;
 
-    if (activeIndex === i && turnElapsed > 120000) div.classList.add('overtime');
-    else if (activeIndex === i) div.classList.add('active');
+    if (activeIndex === i && turnElapsed > 120000) {
+      div.classList.add('overtime');
+      if (!p.warned) {
+        beep(220, 600, 0.3);
+        p.warned = true;
+      }
+    } else if (activeIndex === i) div.classList.add('active');
     else div.classList.add('inactive');
 
-    div.textContent =
-      `${p.name}\n${formatMs(p.elapsedMs + turnElapsed)}\nPunkty: ${p.score}`;
-
+    div.textContent = `${p.name}\n${formatMs(p.elapsedMs + turnElapsed)}\nPunkty: ${p.score}`;
     div.onclick = () => startPlayer(i);
     circle.appendChild(div);
   });
 
-  renderScores();
-}
-
-function renderScores() {
-  const c = document.getElementById('score-container');
-  c.innerHTML = '';
-
+  // Aktualizujemy tylko wartości span punktów, inputy nie są nadpisywane
   players.forEach((p, i) => {
-    c.innerHTML += `
-      <div class="player-score">
-        <strong>${p.name}</strong>
-        <span>${p.score}</span> pkt
-        <input type="number" value="1" id="input-${i}">
-        <button onclick="modifyScore(${i}, true)">+</button>
-        <button onclick="modifyScore(${i}, false)">-</button>
-      </div>`;
+    const scoreSpan = document.getElementById(`player-score-${i}`);
+    if (scoreSpan) scoreSpan.textContent = p.score;
   });
 }
 
-/* ===== SCORE ===== */
+/* ===== RENDER INPUTÓW I TABELI ===== */
+function addScoreInput(i) {
+  const container = document.getElementById('score-container');
+  const div = document.createElement('div');
+  div.className = 'player-score';
+  div.innerHTML = `
+    <strong>${players[i].name}</strong>
+    <span id="player-score-${i}">${players[i].score}</span>
+    <input type="number" value="1" id="input-${i}">
+    <button onclick="modifyScore(${i}, true)">+</button>
+    <button onclick="modifyScore(${i}, false)">-</button>
+  `;
+  container.appendChild(div);
+}
+
+/* ===== MODYFIKACJA PUNKTÓW ===== */
 function modifyScore(i, add) {
-  const v = parseInt(document.getElementById(`input-${i}`).value) || 0;
-  players[i].score = Math.max(0, players[i].score + (add ? v : -v));
+  const input = document.getElementById(`input-${i}`);
+  const val = parseInt(input.value) || 0;
+
+  if (add) players[i].score += val;
+  else players[i].score -= val;
+  if (players[i].score < 0) players[i].score = 0;
+
+  input.value = 1; // reset dopiero po kliknięciu
   renderPlayers();
 }
 
-/* ===== PLAYERS ===== */
+/* ===== DODAWANIE GRACZA ===== */
 function addPlayer() {
   if (players.length >= 9) return alert('Maksymalnie 9 graczy');
-
   const name = prompt('Imię gracza:', `Gracz ${nextId}`) || `Gracz ${nextId}`;
   const startScore = parseInt(prompt('Punkty startowe:', '0')) || 0;
 
-  players.push({
-    name,
-    score: startScore,
-    elapsedMs: 0
-  });
-
+  players.push({ name, score: startScore, elapsedMs: 0, warned: false });
+  addScoreInput(players.length - 1);
   nextId++;
   renderPlayers();
 }
@@ -221,6 +245,7 @@ function startPlayer(i) {
 
   activeIndex = i;
   startedAt = Date.now();
+  players[i].warned = false;
 
   timerInterval = setInterval(renderPlayers, 1000);
   renderPlayers();
@@ -228,9 +253,12 @@ function startPlayer(i) {
 
 function nextPlayer() {
   if (!players.length) return;
+
+  beep(680, 100, 0.15); // klik "Następny"
   startPlayer(activeIndex === null ? 0 : (activeIndex + 1) % players.length);
 }
 
+/* ===== STOP TIMER ===== */
 function stopTimer() {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = null;
@@ -239,16 +267,18 @@ function stopTimer() {
 /* ===== RESET ===== */
 function resetAll() {
   stopTimer();
-  players.forEach(p => {
-    p.elapsedMs = 0;
-    p.score = 0;
-  });
+  players.forEach(p => { p.elapsedMs = 0; p.score = 0; p.warned = false; });
   activeIndex = null;
   startedAt = null;
+  // reset inputy do 1
+  players.forEach((p,i) => {
+    const input = document.getElementById(`input-${i}`);
+    if(input) input.value = 1;
+    const span = document.getElementById(`player-score-${i}`);
+    if(span) span.textContent = 0;
+  });
   renderPlayers();
 }
 </script>
-
 </body>
 </html>
-
