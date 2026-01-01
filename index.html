@@ -4,244 +4,223 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Board Game Timer - Dark Fantasy</title>
+
 <style>
-body { 
-  font-family: sans-serif; 
-  text-align: center; 
-  padding: 20px; 
+/* ===== GLOBAL ===== */
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: sans-serif;
   color: #f0f0f0;
   background-image: url('dark_fantasy_bg.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  margin: 0;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-button { 
-  padding: 6px 10px; 
-  margin: 2px; 
-  border-radius: 6px; 
-  border: none; 
-  cursor: pointer; 
-  background: #333; 
+/* ===== BUTTONS ===== */
+button {
+  padding: 6px 12px;
+  margin: 3px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #333;
   color: #f0f0f0;
-  transition: background 0.3s;
 }
 button:hover { background: #555; }
 
-/* Kontrolki górne */
+/* ===== CONTROLS ===== */
 #controls {
-  border-radius: 10px;
+  background: rgba(30,30,30,0.7);
   padding: 10px;
+  border-radius: 10px;
   text-align: center;
-  margin-bottom: 10px;
+  max-width: 95vw;
 }
 
-/* Koło graczy i tabela wyników */
+#next-button {
+  padding: 14px 30px;
+  font-size: 1.4em;
+  margin-top: 8px;
+  width: 90%;
+}
+
+/* ===== PLAYER CIRCLE ===== */
 #players-circle {
-  position: relative; 
-  width: 400px; 
-  height: 400px; 
-  margin: 20px auto; 
-  background-color: rgba(30,30,30,0.7);
+  position: relative;
+  width: min(90vw, 400px);
+  height: min(90vw, 400px);
+  margin: 20px auto;
+  background: rgba(30,30,30,0.7);
   border-radius: 50%;
-  padding: 10px;
-  display: block;
-}
-#score-container {
-  background-color: rgba(30,30,30,0.7);
-  border-radius: 10px;
-  padding: 10px;
-  margin: 10px auto;
-  display: block;
-  width: fit-content;
 }
 
-/* Gracze */
-.player { 
-  width: 80px; 
-  height: 80px; 
-  border-radius: 10%; 
-  display: flex; 
-  justify-content: center; 
-  align-items: center; 
-  font-weight: bold; 
-  position: absolute; 
-  cursor: pointer; 
-  text-align: center; 
-  white-space: pre-line; 
-  color: #f0f0f0;
+/* ===== PLAYER TILE ===== */
+.player {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 10%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: pre-line;
+  font-weight: bold;
+  cursor: pointer;
 }
+
 .player.inactive { background: #2e3440; }
 .player.active { background: #5e81ac; }
-.player.overtime { background: #72161f; }
+.player.overtime { background: #bf616a; }
 
-/* Duży przycisk Następny */
-#next-button { 
-  padding: 12px 30px; 
-  font-size: 1.4em; 
-  margin-top: 8px;
+/* ===== SCORE TABLE ===== */
+#score-container {
+  background: rgba(30,30,30,0.7);
+  padding: 10px;
+  border-radius: 10px;
+  max-width: 95vw;
 }
 
-/* Inputy */
-input[type="number"] { 
-  width: 60px; 
-  padding: 3px; 
-  background: #3b4252; 
-  color: #eceff4; 
-  border: 1px solid #555; 
+.player-score {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+input[type="number"] {
+  width: 50px;
+  background: #3b4252;
+  color: #eceff4;
+  border: 1px solid #555;
   border-radius: 4px;
 }
 
-/* Lista punktów */
-.player-score { 
-  margin-bottom: 10px; 
-  display: flex; 
-  justify-content: center; 
-  align-items: center; 
-  gap: 5px; 
+/* ===== MOBILE ===== */
+@media (max-width: 600px) {
+  .player {
+    width: 60px;
+    height: 60px;
+    font-size: 0.75em;
+  }
 }
 </style>
 </head>
+
 <body>
+
 <h1>Board Game Timer</h1>
 
-<!-- Kontrolki górne -->
 <div id="controls">
   <button onclick="addPlayer()">Dodaj gracza</button>
-  <button onclick="resetAll()">Reset</button>
-  <br>
+  <button onclick="resetAll()">Reset</button><br>
   <button id="next-button" onclick="nextPlayer()">Następny</button>
 </div>
 
-<!-- Koło graczy -->
 <div id="players-circle"></div>
-
-<!-- Lista punktów pod kołem -->
 <div id="score-container"></div>
 
 <script>
 let players = [];
 let activeIndex = null;
-let timerInterval = null;
-let nextId = 1;
 let startedAt = null;
+let timer = null;
+let nextId = 1;
 
 function formatMs(ms) {
-  const totalSeconds = Math.floor(ms/1000);
-  const minutes = Math.floor(totalSeconds/60).toString().padStart(2,'0');
-  const seconds = (totalSeconds%60).toString().padStart(2,'0');
-  return `${minutes}:${seconds}`;
+  const s = Math.floor(ms / 1000);
+  return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 }
 
 function renderPlayers() {
   const circle = document.getElementById('players-circle');
   circle.innerHTML = '';
-  const N = players.length;
-  const R = 120;
-  const center = 170;
-  players.forEach((p,i)=>{
-    const angle = (2*Math.PI*i)/N - Math.PI/2;
-    const x = center + R*Math.cos(angle);
-    const y = center + R*Math.sin(angle);
+  const size = circle.clientWidth;
+  const center = size / 2 - 40;
+  const radius = size / 2 - 60;
+
+  players.forEach((p, i) => {
+    const angle = (2 * Math.PI * i) / players.length - Math.PI / 2;
+    const x = center + radius * Math.cos(angle);
+    const y = center + radius * Math.sin(angle);
+
     const div = document.createElement('div');
     div.className = 'player';
-    div.style.left = x+'px';
-    div.style.top = y+'px';
+    div.style.left = `${x}px`;
+    div.style.top = `${y}px`;
 
-    let elapsedThisTurn = 0;
-    if(activeIndex === i && startedAt) {
-      elapsedThisTurn = Date.now() - startedAt;
-    }
+    const turnTime = (activeIndex === i && startedAt) ? Date.now() - startedAt : 0;
 
-    if(activeIndex === i && elapsedThisTurn > 120000) div.className += ' overtime';
-    else if(activeIndex === i) div.className += ' active';
-    else div.className += ' inactive';
+    if (activeIndex === i && turnTime > 120000) div.classList.add('overtime');
+    else if (activeIndex === i) div.classList.add('active');
+    else div.classList.add('inactive');
 
-    const totalElapsed = p.elapsedMs + (activeIndex===i && startedAt ? elapsedThisTurn : 0);
-    div.textContent = p.name + '\n' + formatMs(totalElapsed) + '\nPunkty: ' + p.score;
-    div.onclick = ()=>startPlayer(i);
+    div.textContent = `${p.name}\n${formatMs(p.elapsed + turnTime)}\nPunkty: ${p.score}`;
+    div.onclick = () => startPlayer(i);
+
     circle.appendChild(div);
   });
-  renderScoreList();
+
+  renderScores();
 }
 
-function renderScoreList() {
-  const container = document.getElementById('score-container');
-  container.innerHTML = '';
-  players.forEach((p,i)=>{
-    const div = document.createElement('div');
-    div.className = 'player-score';
-    div.innerHTML = `
-      <strong>${p.name}</strong> - Punkty: <span id="player-score-${i}">${p.score}</span>
-      <input type="number" id="input-${i}" value="1" />
-      <button onclick="modifyScore(${i}, true)">Dodaj</button>
-      <button onclick="modifyScore(${i}, false)">Odejmij</button>
-    `;
-    container.appendChild(div);
+function renderScores() {
+  const c = document.getElementById('score-container');
+  c.innerHTML = '';
+  players.forEach((p, i) => {
+    c.innerHTML += `
+      <div class="player-score">
+        <strong>${p.name}</strong>
+        <span>${p.score}</span>
+        <input type="number" value="1" id="s${i}">
+        <button onclick="score(${i},1)">+</button>
+        <button onclick="score(${i},-1)">-</button>
+      </div>`;
   });
 }
 
-function modifyScore(idx, add=true) {
-  const input = document.getElementById(`input-${idx}`);
-  const val = parseInt(input.value) || 0;
-  if(add) players[idx].score += val;
-  else players[idx].score -= val;
-  if(players[idx].score < 0) players[idx].score = 0;
-  document.getElementById(`player-score-${idx}`).textContent = players[idx].score;
-  input.value = 1;
+function score(i, dir) {
+  const v = parseInt(document.getElementById(`s${i}`).value) || 0;
+  players[i].score = Math.max(0, players[i].score + v * dir);
   renderPlayers();
 }
 
 function addPlayer() {
-  if(players.length >= 9) return alert('Maksymalnie 9 graczy!');
-  const name = prompt('Imię gracza:', 'Gracz ' + nextId) || 'Gracz ' + nextId;
-  const startingPoints = parseInt(prompt('Punkty startowe:', '0')) || 0;
-  players.push({id: nextId++, name: name, elapsedMs: 0, score: startingPoints});
+  const name = prompt('Imię gracza', `Gracz ${nextId}`) || `Gracz ${nextId}`;
+  players.push({ name, elapsed: 0, score: 0 });
+  nextId++;
   renderPlayers();
 }
 
-function startPlayer(idx) {
-  stopTimer();
-  activeIndex = idx;
+function startPlayer(i) {
+  if (activeIndex !== null && startedAt)
+    players[activeIndex].elapsed += Date.now() - startedAt;
+
+  activeIndex = i;
   startedAt = Date.now();
-  startTimer();
   renderPlayers();
-}
-
-function startTimer() {
-  timerInterval = setInterval(()=>{
-    if(activeIndex!==null && startedAt!==null){
-      renderPlayers();
-    }
-  }, 1000);
-}
-
-function stopTimer() {
-  if(timerInterval) clearInterval(timerInterval);
-  timerInterval = null;
 }
 
 function nextPlayer() {
-  if(players.length===0) return;
-  stopTimer();
-  if(activeIndex !== null && startedAt) {
-    players[activeIndex].elapsedMs += Date.now() - startedAt;
-  }
-  activeIndex = activeIndex===null?0:(activeIndex+1)%players.length;
-  startedAt = Date.now();
-  startTimer();
-  renderPlayers();
+  if (!players.length) return;
+  startPlayer(activeIndex === null ? 0 : (activeIndex + 1) % players.length);
 }
 
 function resetAll() {
-  stopTimer();
-  players.forEach(p=>{p.elapsedMs=0; p.score=0;});
-  activeIndex=null;
-  startedAt=null;
+  players.forEach(p => { p.elapsed = 0; p.score = 0; });
+  activeIndex = null;
+  startedAt = null;
   renderPlayers();
 }
 </script>
+
 </body>
 </html>
