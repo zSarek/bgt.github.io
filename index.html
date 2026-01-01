@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Board Game Timer - Dark Fantasy</title>
+<title>Board Game Timer – Dark Fantasy</title>
 
 <style>
-/* ===== GLOBAL ===== */
 body {
   margin: 0;
   padding: 20px;
@@ -14,7 +13,7 @@ body {
   color: #f0f0f0;
   background-image: url('dark_fantasy_bg.png');
   background-size: cover;
-  background-position: center;
+  background-position: center top;
   background-repeat: no-repeat;
   background-attachment: fixed;
 
@@ -23,7 +22,6 @@ body {
   align-items: center;
 }
 
-/* ===== BUTTONS ===== */
 button {
   padding: 6px 12px;
   margin: 3px;
@@ -35,9 +33,8 @@ button {
 }
 button:hover { background: #555; }
 
-/* ===== CONTROLS ===== */
 #controls {
-  background: rgba(30,30,30,0.7);
+  background: rgba(30,30,30,0.75);
   padding: 10px;
   border-radius: 10px;
   text-align: center;
@@ -51,7 +48,6 @@ button:hover { background: #555; }
   width: 90%;
 }
 
-/* ===== PLAYER CIRCLE ===== */
 #players-circle {
   position: relative;
   width: min(90vw, 400px);
@@ -61,7 +57,6 @@ button:hover { background: #555; }
   border-radius: 50%;
 }
 
-/* ===== PLAYER TILE ===== */
 .player {
   position: absolute;
   width: 80px;
@@ -74,15 +69,15 @@ button:hover { background: #555; }
   white-space: pre-line;
   font-weight: bold;
   cursor: pointer;
+  color: #f0f0f0;
 }
 
-.player.inactive { background: #2e3440; }
+.player.inactive { background: #444; }
 .player.active { background: #5e81ac; }
-.player.overtime { background: #bf616a; }
+.player.overtime { background: #a33; }
 
-/* ===== SCORE TABLE ===== */
 #score-container {
-  background: rgba(30,30,30,0.7);
+  background: rgba(30,30,30,0.75);
   padding: 10px;
   border-radius: 10px;
   max-width: 95vw;
@@ -97,14 +92,13 @@ button:hover { background: #555; }
 }
 
 input[type="number"] {
-  width: 50px;
+  width: 55px;
   background: #3b4252;
   color: #eceff4;
   border: 1px solid #555;
   border-radius: 4px;
 }
 
-/* ===== MOBILE ===== */
 @media (max-width: 600px) {
   .player {
     width: 60px;
@@ -132,17 +126,20 @@ input[type="number"] {
 let players = [];
 let activeIndex = null;
 let startedAt = null;
-let timer = null;
+let timerInterval = null;
 let nextId = 1;
 
+/* ===== TIME ===== */
 function formatMs(ms) {
   const s = Math.floor(ms / 1000);
-  return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
 }
 
+/* ===== RENDER ===== */
 function renderPlayers() {
   const circle = document.getElementById('players-circle');
   circle.innerHTML = '';
+
   const size = circle.clientWidth;
   const center = size / 2 - 40;
   const radius = size / 2 - 60;
@@ -157,15 +154,18 @@ function renderPlayers() {
     div.style.left = `${x}px`;
     div.style.top = `${y}px`;
 
-    const turnTime = (activeIndex === i && startedAt) ? Date.now() - startedAt : 0;
+    let turnElapsed = 0;
+    if (activeIndex === i && startedAt)
+      turnElapsed = Date.now() - startedAt;
 
-    if (activeIndex === i && turnTime > 120000) div.classList.add('overtime');
+    if (activeIndex === i && turnElapsed > 120000) div.classList.add('overtime');
     else if (activeIndex === i) div.classList.add('active');
     else div.classList.add('inactive');
 
-    div.textContent = `${p.name}\n${formatMs(p.elapsed + turnTime)}\nPunkty: ${p.score}`;
-    div.onclick = () => startPlayer(i);
+    div.textContent =
+      `${p.name}\n${formatMs(p.elapsedMs + turnElapsed)}\nPunkty: ${p.score}`;
 
+    div.onclick = () => startPlayer(i);
     circle.appendChild(div);
   });
 
@@ -175,37 +175,54 @@ function renderPlayers() {
 function renderScores() {
   const c = document.getElementById('score-container');
   c.innerHTML = '';
+
   players.forEach((p, i) => {
     c.innerHTML += `
       <div class="player-score">
         <strong>${p.name}</strong>
-        <span>${p.score}</span>
-        <input type="number" value="1" id="s${i}">
-        <button onclick="score(${i},1)">+</button>
-        <button onclick="score(${i},-1)">-</button>
+        <span>${p.score}</span> pkt
+        <input type="number" value="1" id="input-${i}">
+        <button onclick="modifyScore(${i}, true)">+</button>
+        <button onclick="modifyScore(${i}, false)">-</button>
       </div>`;
   });
 }
 
-function score(i, dir) {
-  const v = parseInt(document.getElementById(`s${i}`).value) || 0;
-  players[i].score = Math.max(0, players[i].score + v * dir);
+/* ===== SCORE ===== */
+function modifyScore(i, add) {
+  const v = parseInt(document.getElementById(`input-${i}`).value) || 0;
+  players[i].score = Math.max(0, players[i].score + (add ? v : -v));
   renderPlayers();
 }
 
+/* ===== PLAYERS ===== */
 function addPlayer() {
-  const name = prompt('Imię gracza', `Gracz ${nextId}`) || `Gracz ${nextId}`;
-  players.push({ name, elapsed: 0, score: 0 });
+  if (players.length >= 9) return alert('Maksymalnie 9 graczy');
+
+  const name = prompt('Imię gracza:', `Gracz ${nextId}`) || `Gracz ${nextId}`;
+  const startScore = parseInt(prompt('Punkty startowe:', '0')) || 0;
+
+  players.push({
+    name,
+    score: startScore,
+    elapsedMs: 0
+  });
+
   nextId++;
   renderPlayers();
 }
 
+/* ===== TIMER ===== */
 function startPlayer(i) {
+  stopTimer();
+
   if (activeIndex !== null && startedAt)
-    players[activeIndex].elapsed += Date.now() - startedAt;
+    players[activeIndex].elapsedMs += Date.now() - startedAt;
 
   activeIndex = i;
   startedAt = Date.now();
+
+  timerInterval = setInterval(renderPlayers, 1000);
   renderPlayers();
 }
 
@@ -214,8 +231,18 @@ function nextPlayer() {
   startPlayer(activeIndex === null ? 0 : (activeIndex + 1) % players.length);
 }
 
+function stopTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+}
+
+/* ===== RESET ===== */
 function resetAll() {
-  players.forEach(p => { p.elapsed = 0; p.score = 0; });
+  stopTimer();
+  players.forEach(p => {
+    p.elapsedMs = 0;
+    p.score = 0;
+  });
   activeIndex = null;
   startedAt = null;
   renderPlayers();
